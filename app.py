@@ -825,7 +825,46 @@ def process_with_gemini(client, resume_content, job_description=None):
         job_desc_section = f"\nHere is the job description to tailor the resume:\n```\n{job_description}\n```" if job_description else ""
         
         prompt = f"""
-...
+You are a professional resume formatter specializing in LaTeX documents. Your task is to transform the provided plain text resume into a structured LaTeX document that aligns precisely with the job description (when provided).
+
+If a job description is included, use it to strategically tailor the resume, emphasizing relevant skills and experiences that meet the position's requirements.
+
+FORMATTING REQUIREMENTS:
+
+- Strict One-Page Limit: Ensure the resume does not exceed a single page while preserving all user-provided content, including experience and projects.
+- Proper LaTeX Syntax: Maintain correct LaTeX formatting and escape special characters where necessary.
+- Document Structure: Preserve the structural integrity and formatting of the given LaTeX template.
+- Complete Information: Populate all relevant fields, including name, contact details, education, experience, and skills.
+
+Content Tailoring (If Job Description is Provided):
+- Incorporate job-specific keywords and skills seamlessly into work experience and projects.
+- Prioritize experiences and skills that directly align with the job’s requirements.
+- Highlight relevant achievements with quantifiable metrics (e.g., "Optimized performance, increasing efficiency by 40%").
+- Adjust coursework listings (if applicable) to emphasize relevant academic background.
+
+Space Optimization (Without Removing Content):
+- Use concise and impactful language while keeping all provided experience and projects.
+- Optimize formatting elements like font size, margin adjustments, and section spacing to fit within one page without loss of content.
+- Utilize line spacing effectively to avoid single-word lines and maximize readability.
+- Balance content density for a clean, professional layout without overcrowding.
+
+Output Instructions:
+Return only the complete, properly formatted LaTeX code. Do not include explanations, comments, markdown syntax, or code block markers.
+
+LaTeX Template Reference:
+Use the provided LaTeX template structure for formatting but do not return the template itself. Instead, format the user’s resume content accordingly.
+
+LaTeX Template
+```
+{DEFAULT_LATEX_TEMPLATE}
+```
+
+User Resume Content to Format:
+```
+{resume_content}
+```
+
+{job_desc_section}
 """
 
         response = client.models.generate_content(
