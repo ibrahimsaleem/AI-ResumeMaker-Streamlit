@@ -29,7 +29,10 @@ app = Flask(__name__)
 resume_store = {}
 
 # Default LaTeX resume template
-DEFAULT_LATEX_TEMPLATE = r""" %-------------------------
+DEFAULT_LATEX_TEMPLATE = r""" 
+
+Latex Code start here  
+%-------------------------
 % Resume in Latex
 % Author : Ibrahim Saleem
 % LinkedIn: https://linkedin.com/ibrahimsaleem91
@@ -93,6 +96,7 @@ DEFAULT_LATEX_TEMPLATE = r""" %-------------------------
 
 %-------------------------------------------
 %%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 \begin{document}
 
@@ -193,14 +197,15 @@ DEFAULT_LATEX_TEMPLATE = r""" %-------------------------
 
 
 %
-%-----------PROGRAMMING SKILLS-----------
-\section{Technical Skills}
+%-----------PROGRAMMING SKILLS and Certifications-----------
+\section{Technical Skills & Certifications}
  \begin{itemize}[leftmargin=0.15in, label={}]
     \small{\item{
      \textbf{Languages}{: Java, Python, C/C++, SQL (Postgres), JavaScript, HTML/CSS, R} \\
      \textbf{Frameworks}{: React, Node.js, Flask, JUnit, WordPress, Material-UI, FastAPI} \\
      \textbf{Developer Tools}{: Git, Docker, TravisCI, Google Cloud Platform, VS Code, Visual Studio, PyCharm, IntelliJ, Eclipse} \\
      \textbf{Libraries}{: pandas, NumPy, Matplotlib}
+     \textbf{Certifications}{: Cisco Cybersecurity, ISC2 Certified in Cybersecurity (CC), CompTIA Security+ }
     }}
  \end{itemize}
 
@@ -209,8 +214,7 @@ DEFAULT_LATEX_TEMPLATE = r""" %-------------------------
 \end{document}
 
 """
-
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET"]) 
 def index():
     html_template = '''
     <!doctype html>
@@ -218,7 +222,7 @@ def index():
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <title>AI Resume Generator</title>
+        <title>AI Resume Generator by Mohammad Ibrahim Saleem (Ibrahimsaleem.com)</title>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -238,6 +242,26 @@ def index():
                 font-size: 26px;
                 color: #222;
                 text-align: center;
+            }
+            .app-description {
+                text-align: center;
+                margin-bottom: 20px;
+                color: #555;
+                font-size: 14px;
+            }
+            .developer-info {
+                text-align: center;
+                margin-top: 15px;
+                margin-bottom: 20px;
+                font-size: 14px;
+                color: #666;
+            }
+            .developer-info a {
+                color: #007bff;
+                text-decoration: none;
+            }
+            .developer-info a:hover {
+                text-decoration: underline;
             }
             /* Process container */
             #process-container {
@@ -282,6 +306,18 @@ def index():
                 border-radius: 5px;
                 font-size: 16px;
                 box-sizing: border-box;
+            }
+            .api-key-container {
+                position: relative;
+                display: flex;
+                align-items: center;
+            }
+            .api-key-help {
+                margin-left: 10px;
+                cursor: pointer;
+                color: #007bff;
+                font-size: 20px;
+                font-weight: bold;
             }
             textarea.input-area {
                 min-height: 150px;
@@ -398,14 +434,28 @@ def index():
         <div class="app-container">
             <h2>AI Resume Generator</h2>
             
+            <div class="app-description">
+                This tool converts your plain text resume into formatted LaTeX code. If you provide a job description, 
+                it will align your resume with it. Copy the LaTeX code, open Overleaf, paste the code, and click compile 
+                to generate your professional ATS Friendly resume PDF. \n <a href="https://www.youtube.com/watch?v=_PzDLFJHO3E" target="_blank"> \nHow to convert Latex Code to Pdf</a>
+            </div>
+            
+            <div class="developer-info">
+                Developer: <a href="https://www.linkedin.com/in/ibrahimsaleem91/" target="_blank">Mohammad Ibrahim Saleem</a> | 
+                <a href="https://buymeacoffee.com/ibrahimsaleem" target="_blank">Buy me a coffee</a>
+            </div>
+            
             <!-- Process area -->
             <div id="process-container"></div>
             
             <!-- Form for resume input -->
             <form id="resume-form">
-                <!-- Optional field for user's Gemini API key -->
-                <input type="text" id="api_key" name="api_key" class="input-area"
-                       placeholder="Enter your Gemini API key (optional)" /><br>
+                <!-- API key field with help icon -->
+                <div class="api-key-container">
+                    <input type="text" id="api_key" name="api_key" class="input-area"
+                           placeholder="Enter your Gemini API key" />
+                    <span class="api-key-help" id="api-key-help" title="Learn how to get a free API key">?</span>
+                </div><br>
                 <textarea id="resume_content" name="resume_content" class="input-area"
                        placeholder="Paste your resume content in plain text..."></textarea><br>
                 <!-- Job Description Field -->
@@ -423,23 +473,18 @@ def index():
                     <div id="score-feedback">Processing your resume...</div>
                 </div>
                 
-                <div class="tabs">
-                    <div class="tab active" data-tab="latex-tab">LaTeX Code</div>
-                    <div class="tab" data-tab="actions-tab">Actions</div>
-                </div>
-                
+              
                 <!-- LaTeX Code Tab -->
                 <div id="latex-tab" class="tab-content active">
                     <pre id="latex-code"></pre>
                     <button id="copy-latex-btn" class="action-btn view-latex-btn">Copy LaTeX Code</button>
-                </div>
                 
-               <!-- Add this to the Actions Tab in the HTML -->
-                <div id="actions-tab" class="tab-content">
-                  <p>Your resume has been processed. You can:</p>
+
+                  <p>Your resume has been processed. Use the code to generate the pdf using overleaf. </p>
+                  <p>Or you can:</p>
+
                  <div id="download-options">
                    <a id="download-latex" href="#" class="action-btn view-latex-btn">Download LaTeX File</a>
-                 </div>
                  <button type="button" id="reoptimize-btn" class="action-btn view-latex-btn" style="background-color: #28a745;">Re-optimize Resume</button>
                  <button type="button" id="new-resume-btn" class="action-btn new-resume-btn">Create New Resume</button>
                 </div>
@@ -450,6 +495,7 @@ def index():
             const processContainer = document.getElementById("process-container");
             const resumeForm = document.getElementById("resume-form");
             const apiKeyInput = document.getElementById("api_key");
+            const apiKeyHelp = document.getElementById("api-key-help");
             const resumeContentInput = document.getElementById("resume_content");
             const jobDescriptionInput = document.getElementById("job_description");
             const resultTabs = document.getElementById("result-tabs");
@@ -460,6 +506,11 @@ def index():
             const matchScoreElement = document.getElementById("match-score");
             const scoreFeedbackElement = document.getElementById("score-feedback");
             let currentResumeId = null;
+            
+            // Add event listener for API key help
+            apiKeyHelp.addEventListener("click", () => {
+                window.open("https://www.youtube.com/watch?v=RGgVdjI66rs", "_blank");
+            });
 
             // Set up tabs
             document.querySelectorAll('.tab').forEach(tab => {
@@ -516,6 +567,10 @@ def index():
                 addMessage("Submitting resume content...", "user-message");
                 addMessage("Job description included for tailoring.", "user-message");
                 addMessage("Processing... please wait.", "system-message");
+                addMessage("Formating... please wait.", "system-message");
+                addMessage("Algining to JD... please wait.", "system-message");
+                addMessage("Make the best resume ever...", "system-message");
+
                 
                 // Build POST body including API key and job description
                 let body = "resume_content=" + encodeURIComponent(resumeContent);
@@ -591,61 +646,63 @@ def index():
                 processContainer.appendChild(messageDiv);
                 processContainer.scrollTop = processContainer.scrollHeight;
             }
-        // Handle "Re-optimize Resume"
-const reoptimizeBtn = document.getElementById("reoptimize-btn");
-reoptimizeBtn.addEventListener("click", () => {
-    const currentLatex = latexCodeElement.textContent;
-    const jobDescription = jobDescriptionInput.value.trim();
-    const apiKey = apiKeyInput.value.trim();
-    
-    if (!currentLatex || !jobDescription) {
-        addMessage("Missing information for re-optimization.", "error-message");
-        return;
-    }
-    
-    addMessage("Requesting further optimization...", "user-message");
-    addMessage("Processing... please wait.", "system-message");
-    
-    // Build POST body including the current LaTeX code
-    let body = "resume_content=" + encodeURIComponent(currentLatex);
-    body += "&job_description=" + encodeURIComponent(jobDescription);
-    body += "&is_reoptimization=true"; // Flag to indicate this is a re-optimization request
-    
-    if(apiKey) {
-        body += "&api_key=" + encodeURIComponent(apiKey);
-    }
-    
-    // Send POST request to /generate_resume
-    fetch("/generate_resume", {
-        method: "POST",
-        headers: {"Content-Type": "application/x-www-form-urlencoded"},
-        body: body
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            addMessage("Error: " + data.error, "error-message");
-        } else {
-            addMessage("Resume re-optimized successfully!", "system-message");
-            addMessage("New job match score: " + data.score + "/10", "system-message");
             
-            // Update current resume ID
-            currentResumeId = data.resume_id;
-            
-            // Display updated LaTeX code
-            latexCodeElement.textContent = data.latex_code;
-            
-            // Update score display
-            updateScoreDisplay(data.score);
-            
-            // Update download link
-            downloadLatexLink.href = "/download_latex/" + currentResumeId;
-        }
-    })
-    .catch(error => {
-        addMessage("Error: " + error, "error-message");
-    });
-});
+            // Handle "Re-optimize Resume"
+            const reoptimizeBtn = document.getElementById("reoptimize-btn");
+            reoptimizeBtn.addEventListener("click", () => {
+                const currentLatex = latexCodeElement.textContent;
+                const jobDescription = jobDescriptionInput.value.trim();
+                const apiKey = apiKeyInput.value.trim();
+                
+                if (!currentLatex || !jobDescription) {
+                    addMessage("Missing information for re-optimization.", "error-message");
+                    return;
+                }
+                
+                addMessage("Requesting further optimization...", "user-message");
+                addMessage("Processing... please wait.", "system-message");
+                
+                
+                // Build POST body including the current LaTeX code
+                let body = "resume_content=" + encodeURIComponent(currentLatex);
+                body += "&job_description=" + encodeURIComponent(jobDescription);
+                body += "&is_reoptimization=true"; // Flag to indicate this is a re-optimization request
+                
+                if(apiKey) {
+                    body += "&api_key=" + encodeURIComponent(apiKey);
+                }
+                
+                // Send POST request to /generate_resume
+                fetch("/generate_resume", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                    body: body
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        addMessage("Error: " + data.error, "error-message");
+                    } else {
+                        addMessage("Resume re-optimized successfully!", "system-message");
+                        addMessage("New job match score: " + data.score + "/10", "system-message");
+                        
+                        // Update current resume ID
+                        currentResumeId = data.resume_id;
+                        
+                        // Display updated LaTeX code
+                        latexCodeElement.textContent = data.latex_code;
+                        
+                        // Update score display
+                        updateScoreDisplay(data.score);
+                        
+                        // Update download link
+                        downloadLatexLink.href = "/download_latex/" + currentResumeId;
+                    }
+                })
+                .catch(error => {
+                    addMessage("Error: " + error, "error-message");
+                });
+            });
         </script>
       </body>
     </html>
@@ -815,9 +872,8 @@ LaTeX Template Reference:
 Use the provided LaTeX template structure for formatting but do not return the template itself. Instead, format the user’s resume content accordingly.
 
 LaTeX Template
-```
 {DEFAULT_LATEX_TEMPLATE}
-```
+
 
 User Resume Content to Format:
 ```
@@ -825,7 +881,10 @@ User Resume Content to Format:
 ```
 
 {job_desc_section}
-"""
+
+
+  
+    """
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -842,6 +901,7 @@ User Resume Content to Format:
     except Exception as e:
         logging.exception("Exception occurred while processing with Gemini AI")
         return DEFAULT_LATEX_TEMPLATE
+
 
 def evaluate_resume_job_match(client, latex_code, job_description):
     """
@@ -1025,6 +1085,7 @@ Previous Evaluation Feedback (If Available):
 
 
 """
+
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt
