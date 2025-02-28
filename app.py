@@ -4,7 +4,7 @@ import uuid
 from flask import Flask, request, render_template_string, jsonify, Response
 
 try:
-    from google import genai
+from google import genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
