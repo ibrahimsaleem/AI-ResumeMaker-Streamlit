@@ -453,7 +453,7 @@ def index():
                 <!-- API key field with help icon -->
                 <div class="api-key-container">
                     <input type="text" id="api_key" name="api_key" class="input-area"
-                           placeholder="Enter your Gemini API key" />
+                           placeholder="Enter your Gemini API key (Optional)" />
                     <span class="api-key-help" id="api-key-help" title="Learn how to get a free API key">?</span>
                 </div><br>
                 <textarea id="resume_content" name="resume_content" class="input-area"
