@@ -1,7 +1,8 @@
 import os 
 import logging
 import uuid
-from flask import Flask, request, render_template_string, jsonify, Response
+from flask import Flask, request, render_template, render_template_string, jsonify, Response, session, redirect, url_for
+from functools import wraps
 
 try:
     from google import genai
@@ -23,755 +24,157 @@ else:
     default_client = None
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Required for session management
+
+# Set the passcode
+PASSCODE = "ibrahim@aplyease4139"
+
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'authenticated' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if request.form.get("passcode") == PASSCODE:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        return render_template("login.html", error="Invalid passcode")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop('authenticated', None)
+    return redirect(url_for('login'))
 
 # In-memory store for resumes. Each entry will be a dict with keys:
 # "latex_code": the LaTeX content, "score": the alignment score, "api_key": the API key used (if any)
 resume_store = {}
 
+# Load the default LaTeX template
+def load_template(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        logging.error(f"Error loading template file {file_path}: {str(e)}")
+        return ""
+
+# Load prompt template files
+def load_prompt(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        logging.error(f"Error loading prompt file {file_path}: {str(e)}")
+        return ""
+
 # Default LaTeX resume template
-DEFAULT_LATEX_TEMPLATE = r""" 
+DEFAULT_LATEX_TEMPLATE = load_template("templates/latex_template.tex")
+RESUME_FORMATTER_PROMPT = load_prompt("prompts/resume_formatter.txt")
+RESUME_EVALUATOR_PROMPT = load_prompt("prompts/resume_evaluator.txt")
+RESUME_OPTIMIZER_PROMPT = load_prompt("prompts/resume_optimizer.txt")
 
-Latex Code start here  
-%-------------------------
-% Resume in Latex
-% Author : Ibrahim Saleem
-% LinkedIn: https://linkedin.com/ibrahimsaleem91
-%------------------------
-
-\documentclass[letterpaper,9.8pt]{article}
-\usepackage{latexsym}
-\usepackage[empty]{fullpage}
-\usepackage{titlesec}
-\usepackage[usenames,dvipsnames]{color}
-\usepackage{enumitem}
-\usepackage[hidelinks]{hyperref}
-\usepackage{fancyhdr}
-\usepackage{tabularx, multicol}
-
-\pagestyle{fancy}
-\fancyhf{}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
-
-% Adjust margins
-\addtolength{\oddsidemargin}{-0.5in}
-\addtolength{\evensidemargin}{-0.5in}
-\addtolength{\textwidth}{1in}
-\addtolength{\topmargin}{-0.7in}
-\addtolength{\textheight}{1.35in}
-
-\urlstyle{same}
-\raggedbottom
-\raggedright
-\setlength{\tabcolsep}{0in}
-
-\titleformat{\section}{
-  \vspace{-10pt}\scshape\raggedright\large
-}{}{0em}{}[\color{black}\titlerule \vspace{-10pt}]
-
-% Custom commands
-\newcommand{\resumeItem}[1]{
-  \item\small{
-    {#1 \vspace{-3pt}}
-  }
-}
-
-\newcommand{\resumeSubheading}[4]{
-  \vspace{-1pt}\item
-    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
-      \textbf{#1} & #2 \\
-      \textit{\small#3} & \textit{\small #4} \\
-    \end{tabular*}\vspace{-6pt}
-}
-
-\newcommand{\resumeProjectHeading}[2]{
-    \item
-    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
-      \small#1 & #2 \\
-    \end{tabular*}\vspace{-6pt}
-}
-
-\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=*]}
-\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
-
-%-------------------------------------------
-%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-\begin{document}
-
-%----------HEADING----------
-% \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-%   \textbf{\href{http://sourabhbajaj.com/}{\Large Sourabh Bajaj}} & Email : \href{mailto:sourabh@sourabhbajaj.com}{sourabh@sourabhbajaj.com}\\
-%   \href{http://sourabhbajaj.com/}{http://www.sourabhbajaj.com} & Mobile : +1-123-456-7890 \\
-% \end{tabular*}
-
-\begin{center}
-    \textbf{\Huge \scshape Jake Ryan} \\ \vspace{1pt}
-    \small 123-456-7890 $|$ \href{mailto:x@x.com}{\underline{jake@su.edu}} $|$ 
-    \href{https://linkedin.com/in/...}{\underline{linkedin.com/in/jake}} $|$
-    \href{https://github.com/...}{\underline{github.com/jake}}
-\end{center}
-
-
-%-----------EDUCATION-----------
-\section{Education}
-  \resumeSubHeadingListStart
-    \resumeSubheading
-      {Southwestern University}{Georgetown, TX}
-      {Bachelor of Arts in Computer Science, Minor in Business}{Aug. 2018 -- May 2021}
-    \resumeSubheading
-      {Blinn College}{Bryan, TX}
-      {Associate's in Liberal Arts}{Aug. 2014 -- May 2018}
-  \resumeSubHeadingListEnd
-
-
-%-----------EXPERIENCE-----------
-\section{Experience}
-  \resumeSubHeadingListStart
-
-    \resumeSubheading
-      {Undergraduate Research Assistant}{June 2020 -- Present}
-      {Texas A\&M University}{College Station, TX}
-      \resumeItemListStart
-        \resumeItem{Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems}
-        \resumeItem{Developed a full-stack web application using Flask, React, PostgreSQL and Docker to analyze GitHub data}
-        \resumeItem{Explored ways to visualize GitHub collaboration in a classroom setting}
-      \resumeItemListEnd
-      
-% -----------Multiple Positions Heading-----------
-%    \resumeSubSubheading
-%     {Software Engineer I}{Oct 2014 - Sep 2016}
-%     \resumeItemListStart
-%        \resumeItem{Apache Beam}
-%          {Apache Beam is a unified model for defining both batch and streaming data-parallel processing pipelines}
-%     \resumeItemListEnd
-%    \resumeSubHeadingListEnd
-%-------------------------------------------
-
-    \resumeSubheading
-      {Information Technology Support Specialist}{Sep. 2018 -- Present}
-      {Southwestern University}{Georgetown, TX}
-      \resumeItemListStart
-        \resumeItem{Communicate with managers to set up campus computers used on campus}
-        \resumeItem{Assess and troubleshoot computer problems brought by students, faculty and staff}
-        \resumeItem{Maintain upkeep of computers, classroom equipment, and 200 printers across campus}
-    \resumeItemListEnd
-
-    \resumeSubheading
-      {Artificial Intelligence Research Assistant}{May 2019 -- July 2019}
-      {Southwestern University}{Georgetown, TX}
-      \resumeItemListStart
-        \resumeItem{Explored methods to generate video game dungeons based off of \emph{The Legend of Zelda}}
-        \resumeItem{Developed a game in Java to test the generated dungeons}
-        \resumeItem{Contributed 50K+ lines of code to an established codebase via Git}
-        \resumeItem{Conducted  a human subject study to determine which video game dungeon generation technique is enjoyable}
-        \resumeItem{Wrote an 8-page paper and gave multiple presentations on-campus}
-        \resumeItem{Presented virtually to the World Conference on Computational Intelligence}
-      \resumeItemListEnd
-
-  \resumeSubHeadingListEnd
-
-
-%-----------PROJECTS-----------
-\section{Projects}
-    \resumeSubHeadingListStart
-      \resumeProjectHeading
-          {\textbf{Gitlytics} $|$ \emph{Python, Flask, React, PostgreSQL, Docker}}{June 2020 -- Present}
-          \resumeItemListStart
-            \resumeItem{Developed a full-stack web application using with Flask serving a REST API with React as the frontend}
-            \resumeItem{Implemented GitHub OAuth to get data from user’s repositories}
-            \resumeItem{Visualized GitHub data to show collaboration}
-            \resumeItem{Used Celery and Redis for asynchronous tasks}
-          \resumeItemListEnd
-      \resumeProjectHeading
-          {\textbf{Simple Paintball} $|$ \emph{Spigot API, Java, Maven, TravisCI, Git}}{May 2018 -- May 2020}
-          \resumeItemListStart
-            \resumeItem{Developed a Minecraft server plugin to entertain kids during free time for a previous job}
-            \resumeItem{Published plugin to websites gaining 2K+ downloads and an average 4.5/5-star review}
-            \resumeItem{Implemented continuous delivery using TravisCI to build the plugin upon new a release}
-            \resumeItem{Collaborated with Minecraft server administrators to suggest features and get feedback about the plugin}
-          \resumeItemListEnd
-    \resumeSubHeadingListEnd
-
-
-
-%
-%-----------PROGRAMMING SKILLS and Certifications-----------
-\section{Technical Skills & Certifications}
- \begin{itemize}[leftmargin=0.15in, label={}]
-    \small{\item{
-     \textbf{Languages}{: Java, Python, C/C++, SQL (Postgres), JavaScript, HTML/CSS, R} \\
-     \textbf{Frameworks}{: React, Node.js, Flask, JUnit, WordPress, Material-UI, FastAPI} \\
-     \textbf{Developer Tools}{: Git, Docker, TravisCI, Google Cloud Platform, VS Code, Visual Studio, PyCharm, IntelliJ, Eclipse} \\
-     \textbf{Libraries}{: pandas, NumPy, Matplotlib}
-     \textbf{Certifications}{: Cisco Cybersecurity, ISC2 Certified in Cybersecurity (CC), CompTIA Security+ }
-    }}
- \end{itemize}
-
-
-%-------------------------------------------
-\end{document}
-
-"""
 @app.route("/", methods=["GET"]) 
+@login_required
 def index():
-    html_template = '''
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <title>AI Resume Generator by Mohammad Ibrahim Saleem (Ibrahimsaleem.com)</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                max-width: 800px;
-                margin: 20px auto;
-                padding: 20px;
-                background-color: #f9f9f9;
-            }
-            .app-container {
-                background: #ffffff;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-            }
-            .app-container h2 {
-                margin-bottom: 15px;
-                font-size: 26px;
-                color: #222;
-                text-align: center;
-            }
-            .app-description {
-                text-align: center;
-                margin-bottom: 20px;
-                color: #555;
-                font-size: 14px;
-            }
-            .developer-info {
-                text-align: center;
-                margin-top: 15px;
-                margin-bottom: 20px;
-                font-size: 14px;
-                color: #666;
-            }
-            .developer-info a {
-                color: #007bff;
-                text-decoration: none;
-            }
-            .developer-info a:hover {
-                text-decoration: underline;
-            }
-            /* Process container */
-            #process-container {
-                margin-bottom: 20px;
-                max-height: 300px;
-                overflow-y: auto;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
-                background-color: #fafafa;
-            }
-            /* Message bubbles */
-            .message {
-                margin: 10px 0;
-                padding: 10px;
-                border-radius: 10px;
-                width: fit-content;
-                max-width: 80%;
-                word-wrap: break-word;
-            }
-            .user-message {
-                background-color: #d1ecf1;
-                color: #0c5460;
-                font-weight: bold;
-                margin-left: auto;
-            }
-            .system-message {
-                background-color: #d4edda;
-                color: #155724;
-                margin-right: auto;
-            }
-            .error-message {
-                background-color: #f8d7da;
-                color: #721c24;
-                margin-right: auto;
-            }
-            .input-area {
-                width: 100%;
-                padding: 12px;
-                margin-top: 10px;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                font-size: 16px;
-                box-sizing: border-box;
-            }
-            .api-key-container {
-                position: relative;
-                display: flex;
-                align-items: center;
-            }
-            .api-key-help {
-                margin-left: 10px;
-                cursor: pointer;
-                color: #007bff;
-                font-size: 20px;
-                font-weight: bold;
-            }
-            textarea.input-area {
-                min-height: 150px;
-                resize: vertical;
-            }
-            .submit-btn {
-                margin-top: 10px;
-                padding: 12px;
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                width: 100%;
-            }
-            .submit-btn:hover {
-                opacity: 0.9;
-            }
-            pre {
-                background: #f8f9fa;
-                padding: 15px;
-                border-radius: 5px;
-                white-space: pre-wrap;
-                margin-top: 5px;
-                border: 1px solid #ddd;
-                max-height: 300px;
-                overflow-y: auto;
-                font-size: 12px;
-            }
-            .hidden {
-                display: none;
-            }
-            .action-btn {
-                display: inline-block;
-                margin-right: 10px;
-                margin-top: 10px;
-                padding: 10px 15px;
-                border-radius: 5px;
-                color: white;
-                cursor: pointer;
-                text-decoration: none;
-                text-align: center;
-                font-size: 14px;
-            }
-            .view-latex-btn {
-                background-color: #17a2b8;
-            }
-            .new-resume-btn {
-                background-color: #6c757d;
-            }
-            .code-container {
-                margin-top: 20px;
-                display: none;
-            }
-            .tabs {
-                display: flex;
-                margin-top: 20px;
-                border-bottom: 1px solid #ddd;
-            }
-            .tab {
-                padding: 10px 15px;
-                cursor: pointer;
-                background-color: #f8f9fa;
-                border: 1px solid #ddd;
-                border-bottom: none;
-                border-radius: 5px 5px 0 0;
-                margin-right: 5px;
-            }
-            .tab.active {
-                background-color: white;
-                border-bottom: 1px solid white;
-                margin-bottom: -1px;
-            }
-            .tab-content {
-                display: none;
-                padding: 15px;
-                border: 1px solid #ddd;
-                border-top: none;
-                background-color: white;
-            }
-            .tab-content.active {
-                display: block;
-            }
-            .score-container {
-                text-align: center;
-                margin: 20px 0;
-                padding: 15px;
-                border-radius: 5px;
-                background-color: #f8f9fa;
-                border: 1px solid #ddd;
-            }
-            .score {
-                font-size: 32px;
-                font-weight: bold;
-                margin: 10px 0;
-            }
-            .score-high {
-                color: #28a745;
-            }
-            .score-medium {
-                color: #ffc107;
-            }
-            .score-low {
-                color: #dc3545;
-            }
-            .score-label {
-                font-size: 14px;
-                color: #6c757d;
-            }
-        </style>
-      </head>
-      <body>
-        <div class="app-container">
-            <h2>AI Resume Generator</h2>
-            
-            <div class="app-description">
-                This tool converts your plain text resume into formatted LaTeX code. If you provide a job description, 
-                it will align your resume with it. Copy the LaTeX code, open Overleaf, paste the code, and click compile 
-                to generate your professional ATS Friendly resume PDF. \n <a href="https://www.youtube.com/watch?v=_PzDLFJHO3E" target="_blank"> \nHow to convert Latex Code to Pdf</a>
-            </div>
-            
-            <div class="developer-info">
-                Developer: <a href="https://www.linkedin.com/in/ibrahimsaleem91/" target="_blank">Mohammad Ibrahim Saleem</a> | 
-                <a href="https://buymeacoffee.com/ibrahimsaleem" target="_blank">Buy me a coffee</a>
-            </div>
-            
-            <!-- Process area -->
-            <div id="process-container"></div>
-            
-            <!-- Form for resume input -->
-            <form id="resume-form">
-                <!-- API key field with help icon -->
-                <div class="api-key-container">
-                    <input type="text" id="api_key" name="api_key" class="input-area"
-                           placeholder="Enter your Gemini API key (Optional)" />
-                    <span class="api-key-help" id="api-key-help" title="Learn how to get a free API key">?</span>
-                </div><br>
-                <textarea id="resume_content" name="resume_content" class="input-area"
-                       placeholder="Paste your resume content in plain text..."></textarea><br>
-                <!-- Job Description Field -->
-                <textarea id="job_description" name="job_description" class="input-area"
-                       placeholder="Enter the job description to tailor your resume..."></textarea><br>
-                <button type="submit" class="submit-btn">Generate Resume</button>
-            </form>
-            
-            <!-- Tabs for LaTeX code and actions -->
-            <div id="result-tabs" class="hidden">
-                <!-- Job Match Score -->
-                <div id="score-container" class="score-container">
-                    <div class="score-label">JOB MATCH SCORE</div>
-                    <div id="match-score" class="score">0/10</div>
-                    <div id="score-feedback">Processing your resume...</div>
-                </div>
-                
-              
-                <!-- LaTeX Code Tab -->
-                <div id="latex-tab" class="tab-content active">
-                    <pre id="latex-code"></pre>
-                    <button id="copy-latex-btn" class="action-btn view-latex-btn">Copy LaTeX Code</button>
-                
-
-                  <p>Your resume has been processed. Use the code to generate the pdf using overleaf. </p>
-                  <p>Or you can:</p>
-
-                 <div id="download-options">
-                   <a id="download-latex" href="#" class="action-btn view-latex-btn">Download LaTeX File</a>
-                 <button type="button" id="reoptimize-btn" class="action-btn view-latex-btn" style="background-color: #28a745;">Re-optimize Resume</button>
-                 <button type="button" id="new-resume-btn" class="action-btn new-resume-btn">Create New Resume</button>
-                </div>
-            </div>
-        </div>
-        
-        <script>
-            const processContainer = document.getElementById("process-container");
-            const resumeForm = document.getElementById("resume-form");
-            const apiKeyInput = document.getElementById("api_key");
-            const apiKeyHelp = document.getElementById("api-key-help");
-            const resumeContentInput = document.getElementById("resume_content");
-            const jobDescriptionInput = document.getElementById("job_description");
-            const resultTabs = document.getElementById("result-tabs");
-            const latexCodeElement = document.getElementById("latex-code");
-            const copyLatexBtn = document.getElementById("copy-latex-btn");
-            const downloadLatexLink = document.getElementById("download-latex");
-            const newResumeBtn = document.getElementById("new-resume-btn");
-            const matchScoreElement = document.getElementById("match-score");
-            const scoreFeedbackElement = document.getElementById("score-feedback");
-            let currentResumeId = null;
-            
-            // Add event listener for API key help
-            apiKeyHelp.addEventListener("click", () => {
-                window.open("https://www.youtube.com/watch?v=RGgVdjI66rs", "_blank");
-            });
-
-            // Set up tabs
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    // Remove active class from all tabs and content
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                    
-                    // Add active class to clicked tab
-                    tab.classList.add('active');
-                    
-                    // Show corresponding content
-                    const tabId = tab.getAttribute('data-tab');
-                    document.getElementById(tabId).classList.add('active');
-                });
-            });
-
-            // Function to update the match score display
-            function updateScoreDisplay(score) {
-                matchScoreElement.textContent = score + "/10";
-                
-                // Remove any existing score classes
-                matchScoreElement.classList.remove("score-high", "score-medium", "score-low");
-                
-                // Add appropriate class based on score
-                if (score >= 8) {
-                    matchScoreElement.classList.add("score-high");
-                    scoreFeedbackElement.textContent = "Excellent match with the job description!";
-                } else if (score >= 6) {
-                    matchScoreElement.classList.add("score-medium");
-                    scoreFeedbackElement.textContent = "Good match with the job description.";
-                } else {
-                    matchScoreElement.classList.add("score-low");
-                    scoreFeedbackElement.textContent = "Could be better aligned with the job description.";
-                }
-            }
-
-            // Handle the resume generation
-            resumeForm.addEventListener("submit", function(e) {
-                e.preventDefault();
-                const apiKey = apiKeyInput.value.trim();
-                const resumeContent = resumeContentInput.value.trim();
-                const jobDescription = jobDescriptionInput.value.trim();
-                if (!resumeContent) {
-                    addMessage("Please enter your resume content.", "error-message");
-                    return;
-                }
-                
-                if (!jobDescription) {
-                    addMessage("Please provide a job description for better resume tailoring.", "error-message");
-                    return;
-                }
-
-                addMessage("Submitting resume content...", "user-message");
-                addMessage("Job description included for tailoring.", "user-message");
-                addMessage("Processing... please wait.", "system-message");
-                addMessage("Formating... please wait.", "system-message");
-                addMessage("Algining to JD... please wait.", "system-message");
-                addMessage("Make the best resume ever...", "system-message");
-
-                
-                // Build POST body including API key and job description
-                let body = "resume_content=" + encodeURIComponent(resumeContent);
-                body += "&job_description=" + encodeURIComponent(jobDescription);
-                if(apiKey) {
-                    body += "&api_key=" + encodeURIComponent(apiKey);
-                }
-
-                // Send POST request to /generate_resume
-                fetch("/generate_resume", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                    body: body
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        addMessage("Error: " + data.error, "error-message");
-                    } else {
-                        addMessage("Resume processed successfully!", "system-message");
-                        addMessage("Job match score: " + data.score + "/10", "system-message");
-                        
-                        if (data.optimized) {
-                            addMessage("Resume was automatically optimized to better match the job description.", "system-message");
-                        }
-                        
-                        resumeForm.classList.add("hidden");
-                        resultTabs.classList.remove("hidden");
-                        currentResumeId = data.resume_id;
-                        
-                        // Display LaTeX code
-                        latexCodeElement.textContent = data.latex_code;
-                        
-                        // Update score display
-                        updateScoreDisplay(data.score);
-                        
-                        // Set up download link
-                        downloadLatexLink.href = "/download_latex/" + currentResumeId;
-                        downloadLatexLink.download = "resume.tex";
-                    }
-                })
-                .catch(error => {
-                    addMessage("Error: " + error, "error-message");
-                });
-            });
-
-            // Copy LaTeX code to clipboard
-            copyLatexBtn.addEventListener("click", () => {
-                navigator.clipboard.writeText(latexCodeElement.textContent)
-                    .then(() => {
-                        addMessage("LaTeX code copied to clipboard", "system-message");
-                    })
-                    .catch(err => {
-                        addMessage("Failed to copy: " + err, "error-message");
-                    });
-            });
-
-            // Handle "Create New Resume"
-            newResumeBtn.addEventListener("click", () => {
-                resumeForm.classList.remove("hidden");
-                resultTabs.classList.add("hidden");
-                // Clear previous values
-                // resumeContentInput.value = "";
-                // jobDescriptionInput.value = "";
-                currentResumeId = null;
-            });
-
-            // Helper function to add messages to the process container
-            function addMessage(text, className) {
-                const messageDiv = document.createElement("div");
-                messageDiv.className = "message " + className;
-                messageDiv.textContent = text;
-                processContainer.appendChild(messageDiv);
-                processContainer.scrollTop = processContainer.scrollHeight;
-            }
-            
-            // Handle "Re-optimize Resume"
-            const reoptimizeBtn = document.getElementById("reoptimize-btn");
-            reoptimizeBtn.addEventListener("click", () => {
-                const currentLatex = latexCodeElement.textContent;
-                const jobDescription = jobDescriptionInput.value.trim();
-                const apiKey = apiKeyInput.value.trim();
-                
-                if (!currentLatex || !jobDescription) {
-                    addMessage("Missing information for re-optimization.", "error-message");
-                    return;
-                }
-                
-                addMessage("Requesting further optimization...", "user-message");
-                addMessage("Processing... please wait.", "system-message");
-                
-                
-                // Build POST body including the current LaTeX code
-                let body = "resume_content=" + encodeURIComponent(currentLatex);
-                body += "&job_description=" + encodeURIComponent(jobDescription);
-                body += "&is_reoptimization=true"; // Flag to indicate this is a re-optimization request
-                
-                if(apiKey) {
-                    body += "&api_key=" + encodeURIComponent(apiKey);
-                }
-                
-                // Send POST request to /generate_resume
-                fetch("/generate_resume", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                    body: body
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        addMessage("Error: " + data.error, "error-message");
-                    } else {
-                        addMessage("Resume re-optimized successfully!", "system-message");
-                        addMessage("New job match score: " + data.score + "/10", "system-message");
-                        
-                        // Update current resume ID
-                        currentResumeId = data.resume_id;
-                        
-                        // Display updated LaTeX code
-                        latexCodeElement.textContent = data.latex_code;
-                        
-                        // Update score display
-                        updateScoreDisplay(data.score);
-                        
-                        // Update download link
-                        downloadLatexLink.href = "/download_latex/" + currentResumeId;
-                    }
-                })
-                .catch(error => {
-                    addMessage("Error: " + error, "error-message");
-                });
-            });
-        </script>
-      </body>
-    </html>
-    '''
-    return render_template_string(html_template)
+    return render_template("index.html")
 
 @app.route("/generate_resume", methods=["POST"])
+@login_required
 def generate_resume():
     """Handles the resume generation process using Gemini AI."""
-    resume_content = request.form.get("resume_content")
-    job_description = request.form.get("job_description")
-    provided_api_key = request.form.get("api_key")
-    
-    if not resume_content:
-        return jsonify({"error": "No resume content provided"})
-    
-    if not job_description:
-        return jsonify({"error": "Job description is required for tailoring"})
-    
-    # Use the provided API key if available; otherwise, use default
-    if HAS_GENAI:
-        local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
-    else:
-        local_client = None
-
     try:
-        logging.info("Starting resume processing")
+        resume_content = request.form.get("resume_content")
+        job_description = request.form.get("job_description")
+        provided_api_key = request.form.get("api_key")
         
-        # Process the resume content with Gemini
-        latex_code = process_with_gemini(local_client, resume_content, job_description)
+        if not resume_content:
+            return jsonify({"error": "No resume content provided"}), 400
         
-        # Evaluate the resume's alignment with the job description
-        score, feedback = evaluate_resume_job_match(local_client, latex_code, job_description)
+        if not job_description:
+            return jsonify({"error": "Job description is required for tailoring"}), 400
         
-        optimized = False
-        
-        # If score is below 7, reprocess to better align with job description
-        if score < 8:
-            logging.info(f"Initial score {score}/10 is below threshold. Reprocessing resume...")
-            latex_code = optimize_resume_for_job(local_client, latex_code, job_description, feedback)
-            optimized = True
-            
-            # Re-evaluate the optimized resume
-            score, feedback = evaluate_resume_job_match(local_client, latex_code, job_description)
-            logging.info(f"Optimized resume score: {score}/10")
-        
-        # Generate a unique ID and store the LaTeX code and score
-        resume_id = str(uuid.uuid4())
-        resume_store[resume_id] = {
-            "latex_code": latex_code,
-            "score": score,
-            "feedback": feedback,
-            "api_key": provided_api_key if provided_api_key else None
-        }
+        # Use the provided API key if available; otherwise, use default
+        if HAS_GENAI:
+            local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
+            if not local_client:
+                return jsonify({"error": "No valid API client available"}), 500
+        else:
+            local_client = None
 
-        return jsonify({
-            "resume_id": resume_id,
-            "latex_code": latex_code,
-            "score": score,
-            "feedback": feedback,
-            "optimized": optimized,
-            "message": "Resume generated successfully"
-        })
+        try:
+            logging.info("Starting resume processing")
+            
+            # Process the resume content with Gemini
+            latex_code = process_with_gemini(local_client, resume_content, job_description)
+            if not latex_code:
+                return jsonify({"error": "Failed to generate LaTeX code"}), 500
+            
+            # Evaluate the resume's alignment with the job description
+            score, feedback = evaluate_resume_job_match(local_client, latex_code, job_description)
+            
+            # Analyze skills
+            skills_analysis = analyze_skills(local_client, latex_code, job_description)
+            if not skills_analysis:
+                skills_analysis = {
+                    "current_skills": ["Error analyzing skills"],
+                    "missing_skills": [],
+                    "recommended_skills": [],
+                    "latex_skills_section": ""
+                }
+            
+            optimized = False
+            optimization_message = ''
+            
+            # If score is below 8, reprocess to better align with job description
+            if score < 8:
+                logging.info(f"Initial score {score}/10 is below threshold. Reprocessing resume...")
+                latex_code = optimize_resume_for_job(local_client, latex_code, job_description, feedback)
+                optimized = True
+                optimization_message = 'Optimization was performed automatically because the initial score was low.'
+                # Re-evaluate the optimized resume
+                score, feedback = evaluate_resume_job_match(local_client, latex_code, job_description)
+                logging.info(f"Optimized resume score: {score}/10")
+            
+            # Generate a unique ID and store the LaTeX code and score
+            resume_id = str(uuid.uuid4())
+            resume_store[resume_id] = {
+                "latex_code": latex_code,
+                "score": score,
+                "feedback": feedback,
+                "api_key": provided_api_key if provided_api_key else None
+            }
+
+            response_data = {
+                "resume_id": resume_id,
+                "latex_code": latex_code,
+                "score": score,
+                "feedback": feedback,
+                "optimized": optimized,
+                "optimization_message": optimization_message,
+                "skills_analysis": skills_analysis,
+                "message": "Resume generated successfully"
+            }
+
+            return jsonify(response_data), 200
+
+        except Exception as e:
+            logging.exception("An error occurred during resume generation")
+            error_message = str(e) if str(e) else "An unknown error occurred during processing"
+            return jsonify({"error": f"Processing error: {error_message}"}), 500
 
     except Exception as e:
-        logging.exception("An error occurred during resume generation")
-        return jsonify({"error": f"An error occurred: {e}"})
+        logging.exception("An error occurred in the generate_resume route")
+        return jsonify({"error": "Server error occurred"}), 500
 
 @app.route("/download_latex/<resume_id>", methods=["GET"])
+@login_required
 def download_latex(resume_id):
     """Allows downloading the LaTeX code as a .tex file."""
     if resume_id not in resume_store:
@@ -817,8 +220,8 @@ def mock_process_resume(resume_content, job_description=None):
     
     # Create a basic LaTeX document with the extracted information
     latex_code = DEFAULT_LATEX_TEMPLATE.replace("Jake Ryan", name)
-    latex_code = latex_code.replace("Jakeryan@example.com", contact_info["email"])
-    latex_code = latex_code.replace("(123) 456-7890", contact_info["phone"])
+    latex_code = latex_code.replace("jake@su.edu", contact_info["email"])
+    latex_code = latex_code.replace("123-456-7890", contact_info["phone"])
     
     # If a job description is provided, insert a tailored note after \begin{document}
     if job_description:
@@ -842,34 +245,7 @@ def process_with_gemini(client, resume_content, job_description=None):
         job_desc_section = f"\nHere is the job description to tailor the resume:\n```\n{job_description}\n```" if job_description else ""
         
         prompt = f"""
-You are a professional resume formatter specializing in LaTeX documents. Your task is to transform the provided plain text resume into a structured LaTeX document that aligns precisely with the job description (when provided).
-
-If a job description is included, use it to strategically tailor the resume, emphasizing relevant skills and experiences that meet the position's requirements.
-
-FORMATTING REQUIREMENTS:
-
-- Strict One-Page Limit: Ensure the resume does not exceed a single page while preserving all user-provided content, including experience and projects.
-- Proper LaTeX Syntax: Maintain correct LaTeX formatting and escape special characters where necessary.
-- Document Structure: Preserve the structural integrity and formatting of the given LaTeX template.
-- Complete Information: Populate all relevant fields, including name, contact details, education, experience, and skills.
-
-Content Tailoring (If Job Description is Provided):
-- Incorporate job-specific keywords and skills seamlessly into work experience and projects.
-- Prioritize experiences and skills that directly align with the job’s requirements.
-- Highlight relevant achievements with quantifiable metrics (e.g., "Optimized performance, increasing efficiency by 40%").
-- Adjust coursework listings (if applicable) to emphasize relevant academic background.
-
-Space Optimization (Without Removing Content):
-- Use concise and impactful language while keeping all provided experience and projects.
-- Optimize formatting elements like font size, margin adjustments, and section spacing to fit within one page without loss of content.
-- Utilize line spacing effectively to avoid single-word lines and maximize readability.
-- Balance content density for a clean, professional layout without overcrowding.
-
-Output Instructions:
-Return only the complete, properly formatted LaTeX code. Do not include explanations, comments, markdown syntax, or code block markers.
-
-LaTeX Template Reference:
-Use the provided LaTeX template structure for formatting but do not return the template itself. Instead, format the user’s resume content accordingly.
+{RESUME_FORMATTER_PROMPT}
 
 LaTeX Template
 {DEFAULT_LATEX_TEMPLATE}
@@ -916,7 +292,7 @@ def evaluate_resume_job_match(client, latex_code, job_description):
         logging.info("Evaluating resume-job match...")
         
         prompt = f"""
-You are an expert ATS (Applicant Tracking System) resume evaluator with 15+ years of technical recruiting experience. Conduct a comprehensive analysis of how well this LaTeX resume aligns with the specified job description.
+{RESUME_EVALUATOR_PROMPT}
 
 JOB DESCRIPTION:
 ```
@@ -926,41 +302,6 @@ LATEX RESUME:
 ```
 {latex_code}
 ```
-
-EVALUATION INSTRUCTIONS:
-
-1. First, extract the top 10-15 critical requirements from the job description:
-   - Required technical skills and tools
-   - Experience level and background needed
-   - Educational requirements
-   - Specific domain knowledge
-   - Soft skills and competencies
-
-2. For each requirement, analyze whether the resume effectively demonstrates qualification:
-   - Exact keyword match (highest value)
-   - Semantic match using related terminology
-   - Demonstrated experience with quantifiable results
-   - Missing or inadequately addressed requirements
-
-3. Evaluate resume optimization factors:
-   - Prominence of key qualifications (position on page, emphasis)
-   - Use of job-specific terminology and language
-   - Quantification of relevant achievements
-   - Overall content prioritization for this specific role
-
-4. Calculate a precise match score from 1-10 based on:
-   - 8-10: Excellent match (80%+ of key requirements addressed effectively)
-   - 6-7: Good match (60-79% of requirements addressed)
-   - 4-5: Average match (40-59% of requirements addressed)
-   - 1-3: Poor match (under 40% of requirements addressed)
-
-RESPONSE FORMAT:
-SCORE: [whole number 1-10]
-FEEDBACK: [150-300 word analysis including:
-- Overall assessment of match quality
-- 3-5 specific strengths (with examples from the resume)
-- 3-5 specific improvement opportunities with actionable recommendations
-- Key missing elements or terms that should be added]
 """
 
         response = client.models.generate_content(
@@ -1002,9 +343,7 @@ FEEDBACK: [150-300 word analysis including:
         return 7, f"Unable to evaluate resume-job match due to an error: {str(e)}"
 
 
-
 def optimize_resume_for_job(client, latex_code, job_description, feedback):
-
     """
     Optimizes the resume LaTeX code to better match the job description based on feedback.
     """
@@ -1016,74 +355,22 @@ def optimize_resume_for_job(client, latex_code, job_description, feedback):
         logging.info("Optimizing resume for better job alignment...")
         
         prompt = f"""
-You are an expert LaTeX resume optimizer with extensive experience in professional resume tailoring. Your task is to transform the provided LaTeX resume to precisely match the job requirements while maintaining perfect LaTeX formatting.
-
-If a job description is included, use it to strategically tailor the resume, ensuring that relevant skills and experiences align with the position's requirements.
-
-OPTIMIZATION REQUIREMENTS:
-
-1. ONE-PAGE MAXIMUM: Ensure the resume remains within a single page while retaining all user-provided content, including experience and projects.
-
-2. JOB-SPECIFIC ALIGNMENT:
-   - Integrate key terms and phrases from the job description naturally throughout the resume.
-   - Reorder and prioritize experiences/skills to match job requirements.
-   - Replace generic statements with job-relevant accomplishments.
-   - Adjust section ordering if necessary to emphasize the most relevant qualifications first.
-
-3. QUANTIFIABLE ACHIEVEMENTS:
-   - Convert general statements into specific, measurable outcomes (e.g., "Increased efficiency by 35%").
-   - Add metrics and specific results wherever possible.
-   - Emphasize achievements that directly relate to the job requirements.
-
-4. SPACE OPTIMIZATION (Without Removing Content):
-   - Utilize line space efficiently (avoid lines with just one or two words).
-   - Balance content density while maintaining readability.
-   - Eliminate redundancies and non-essential information.
-   - Use full lines of text rather than leaving white space.
-   - Adjust formatting elements like font size, margin adjustments, and section spacing to fit within one page.
-
-5. COURSEWORK RELEVANCE:
-   - Adjust coursework listings to showcase an academic background relevant to the position.
-   - Replace less relevant courses with more applicable ones based on the job description.
-
-6. LANGUAGE ENHANCEMENT:
-   - Use action verbs and impactful language that mirrors job description terminology.
-   - Replace passive voice with active, accomplishment-focused statements.
-   - Eliminate filler words and redundancies for maximum impact.
-
-7. PERFECT LATEX FORMATTING:
-   - Maintain proper LaTeX syntax and correct escaping of special characters.
-   - Preserve document structure while optimizing content.
-   - Ensure formatting consistency throughout the document.
-
-Output Instructions:
-- Return only the complete, optimized LaTeX code.
-- Do not include explanations, comments, markdown syntax, or code block markers.
+{RESUME_OPTIMIZER_PROMPT}
 
 LaTeX Template Reference:
-Use the provided LaTeX template for formatting but do not return the template itself. Instead, apply its formatting principles to the user’s resume content.
+Use the provided LaTeX template for formatting but do not return the template itself. Instead, apply its formatting principles to the user's resume content.
 
 LaTeX Template:
-```
 {DEFAULT_LATEX_TEMPLATE}
-```
 
 Current LaTeX Resume to Optimize:
-```
 {latex_code}
-```
 
 Job Description:
-```
 {job_description}
-```
 
 Previous Evaluation Feedback (If Available):
-```
 {feedback}
-```
-
-
 """
 
         response = client.models.generate_content(
@@ -1103,34 +390,432 @@ Previous Evaluation Feedback (If Available):
         logging.exception("Exception occurred during resume optimization")
         return latex_code
 
-def iterative_resume_optimization(client, latex_code, job_description, feedback, max_iterations=2):
+def analyze_skills(client, latex_code, job_description):
     """
-    Calls the optimize_resume_for_job function iteratively, passing its output back into itself
-    to further refine the resume until a desired optimization level is reached or max iterations are met.
-
-    :param client: AI client used for content generation
-    :param latex_code: Initial LaTeX resume code
-    :param job_description: Job description text
-    :param feedback: Feedback on the resume's alignment with the job
-    :param max_iterations: Maximum number of iterations to refine the resume
-    :return: Final optimized LaTeX resume code
+    Analyzes the skills section of the resume and compares it with job description requirements.
+    Returns a dictionary containing current skills, missing skills, recommended skills, and a formatted LaTeX skills section.
     """
-    optimized_resume = latex_code
-    for i in range(max_iterations):
-        logging.info(f"Iteration {i+1}: Optimizing resume...")
+    if not client or not HAS_GENAI:
+        return {
+            "current_skills": ["Unable to analyze skills without AI service"],
+            "missing_skills": [],
+            "recommended_skills": [],
+            "current_skills_by_category": {},
+            "recommended_skills_by_category": {},
+            "latex_skills_section": ""
+        }
+    
+    try:
+        logging.info("Analyzing skills comparison...")
         
-        new_feedback = f"Iteration {i+1} feedback: Improve alignment further."  # Can be dynamically set
-        optimized_resume = optimize_resume_for_job(client, optimized_resume, job_description, new_feedback)
+        # First prompt to analyze skills and certifications
+        analysis_prompt = f"""
+You are a skilled resume analyzer. Analyze the resume and job description carefully.
+
+Your tasks:
+1. First, identify the profession type and required skill categories
+2. Extract ALL skills from the resume, including those mentioned in project descriptions and experience
+3. Compare with job description requirements
+4. Recommend additional skills based on job market standards
+5. Identify certifications (both current and recommended)
+
+Format your response EXACTLY as follows:
+
+PROFESSION_TYPE:
+[Identify the profession type]
+
+SKILL_CATEGORIES:
+- [List main skill categories relevant to the profession]
+
+CURRENT_SKILLS:
+Technical Skills:
+- [List all technical skills found in resume]
+Security Skills:
+- [List all security-related skills]
+[Other Categories]:
+- [List skills for each relevant category]
+
+CURRENT_CERTIFICATIONS:
+- [List all certifications mentioned in resume]
+
+MISSING_SKILLS:
+- [List skills mentioned in job description but missing from resume]
+
+RECOMMENDED_SKILLS:
+Technical Skills:
+- [List recommended technical skills]
+Security Skills:
+- [List recommended security skills]
+[Other Categories]:
+- [List recommended skills by category]
+
+RECOMMENDED_CERTIFICATIONS:
+- [List recommended certifications based on job requirements and industry standards]
+
+IMPORTANT INSTRUCTIONS:
+1. Include ALL skills mentioned anywhere in the resume
+2. Include skills mentioned in project descriptions and work experience
+3. Do not mark a skill as missing if it's mentioned anywhere in the resume
+4. Group skills logically by category
+5. Be thorough in skill extraction - don't miss any skills
+
+LaTeX Resume:
+{latex_code}
+
+Job Description:
+{job_description}
+"""
+
+        analysis_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=analysis_prompt
+        )
         
-        if optimized_resume == latex_code:
-            logging.info("No further improvements made. Stopping iterations.")
-            break  # Stop if no improvements were made
+        if not analysis_response.text:
+            return {
+                "current_skills": ["Error: No response from AI"],
+                "missing_skills": [],
+                "recommended_skills": [],
+                "current_skills_by_category": {},
+                "recommended_skills_by_category": {},
+                "latex_skills_section": ""
+            }
+        
+        # Parse the analysis response
+        response_text = analysis_response.text.strip()
+        skills_data = {
+            "profession_type": "",
+            "skill_categories": [],
+            "current_skills": [],
+            "current_skills_by_category": {},
+            "current_certifications": [],
+            "missing_skills": [],
+            "recommended_skills": [],
+            "recommended_skills_by_category": {},
+            "recommended_certifications": []
+        }
+        
+        current_section = None
+        current_category = None
+        
+        for line in response_text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            if 'PROFESSION_TYPE:' in line:
+                current_section = "profession_type"
+                skills_data["profession_type"] = line.split('PROFESSION_TYPE:')[1].strip()
+            elif 'SKILL_CATEGORIES:' in line:
+                current_section = "skill_categories"
+            elif 'CURRENT_SKILLS:' in line:
+                current_section = "current_skills"
+                current_category = None
+            elif 'CURRENT_CERTIFICATIONS:' in line:
+                current_section = "current_certifications"
+            elif 'MISSING_SKILLS:' in line:
+                current_section = "missing_skills"
+            elif 'RECOMMENDED_SKILLS:' in line:
+                current_section = "recommended_skills"
+                current_category = None
+            elif 'RECOMMENDED_CERTIFICATIONS:' in line:
+                current_section = "recommended_certifications"
+            elif line.endswith(':') and current_section in ["current_skills", "recommended_skills"]:
+                current_category = line[:-1]
+                if current_section == "current_skills":
+                    skills_data["current_skills_by_category"][current_category] = []
+                else:
+                    skills_data["recommended_skills_by_category"][current_category] = []
+            elif line.startswith('- '):
+                skill = line[2:].strip()
+                if current_section == "skill_categories":
+                    skills_data["skill_categories"].append(skill)
+                elif current_section == "current_skills":
+                    if current_category:
+                        skills_data["current_skills_by_category"][current_category].append(skill)
+                    skills_data["current_skills"].append(skill)
+                elif current_section == "current_certifications":
+                    skills_data["current_certifications"].append(skill)
+                elif current_section == "missing_skills":
+                    skills_data["missing_skills"].append(skill)
+                elif current_section == "recommended_skills":
+                    if current_category:
+                        skills_data["recommended_skills_by_category"][current_category].append(skill)
+                    skills_data["recommended_skills"].append(skill)
+                elif current_section == "recommended_certifications":
+                    skills_data["recommended_certifications"].append(skill)
 
-        latex_code = optimized_resume  # Update the latest version for the next iteration
+        # Second prompt to generate LaTeX skills section
+        latex_template = """%-----------SKILLS and CERTIFICATIONS-----------
+\\section{Professional Skills \\& Certifications}
+ \\begin{itemize}[leftmargin=0.15in, label={}]
+    \\small{\\item{
+<SKILLS_BY_CATEGORY>
+     \\textbf{Certifications}{: <CERTS>}
+    }}
+ \\end{itemize}"""
 
-    logging.info("Final resume optimization complete.")
-    return optimized_resume
+        # Prepare skills data for formatting
+        current_skills_text = ""
+        for category, skills in skills_data["current_skills_by_category"].items():
+            if skills:
+                current_skills_text += f"{category}:\n- " + "\n- ".join(skills) + "\n\n"
 
+        recommended_skills_text = ""
+        for category, skills in skills_data["recommended_skills_by_category"].items():
+            if skills:
+                recommended_skills_text += f"{category}:\n- " + "\n- ".join(skills) + " (Recommended)\n\n"
+
+        format_prompt = f"""
+Based on the following skills and certifications analysis for a {skills_data['profession_type']} professional, 
+generate a LaTeX skills section using the exact template below.
+
+Current Skills:
+{current_skills_text}
+
+Current Certifications:
+{', '.join(skills_data['current_certifications'])}
+
+Recommended Skills:
+{recommended_skills_text}
+
+Recommended Certifications:
+{', '.join(skills_data['recommended_certifications'])}
+
+Use this exact LaTeX template format:
+{latex_template}
+
+Requirements:
+1. Replace <SKILLS_BY_CATEGORY> with appropriate category sections
+2. For each category, use the format: \\textbf{{Category Name}}{{: skill1, skill2, etc.}} \\\\
+3. Include both current and recommended skills/certifications
+4. Mark recommended skills/certifications with "(Recommended)" suffix
+5. Use appropriate line breaks (\\\\) between sections
+6. Escape any special LaTeX characters
+7. ALWAYS include the Certifications section
+8. If no certifications are found, add "No current certifications"
+9. Group similar skills together within each category
+10. Maintain professional formatting and organization
+"""
+
+        latex_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=format_prompt
+        )
+        
+        if latex_response.text:
+            skills_data["latex_skills_section"] = latex_response.text.strip()
+        else:
+            skills_data["latex_skills_section"] = "Error generating LaTeX skills section"
+
+        return {
+            "current_skills": skills_data["current_skills"],
+            "missing_skills": skills_data["missing_skills"],
+            "recommended_skills": skills_data["recommended_skills"],
+            "current_skills_by_category": skills_data["current_skills_by_category"],
+            "recommended_skills_by_category": skills_data["recommended_skills_by_category"],
+            "latex_skills_section": skills_data["latex_skills_section"]
+        }
+
+    except Exception as e:
+        logging.exception("Error in analyze_skills")
+        return {
+            "current_skills": ["Error analyzing skills: " + str(e)],
+            "missing_skills": [],
+            "recommended_skills": [],
+            "current_skills_by_category": {},
+            "recommended_skills_by_category": {},
+            "latex_skills_section": ""
+        }
+
+@app.route("/reoptimize_resume", methods=["POST"])
+@login_required
+def reoptimize_resume():
+    try:
+        latex_code = request.form.get("latex_code")
+        job_description = request.form.get("job_description")
+        feedback = request.form.get("feedback")
+        provided_api_key = request.form.get("api_key")
+
+        if not latex_code or not job_description:
+            return jsonify({"error": "Missing required fields."}), 400
+
+        if HAS_GENAI:
+            local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
+            if not local_client:
+                return jsonify({"error": "No valid API client available"}), 500
+        else:
+            local_client = None
+
+        try:
+            # Re-optimize the resume
+            optimized_latex = optimize_resume_for_job(local_client, latex_code, job_description, feedback)
+            if not optimized_latex:
+                return jsonify({"error": "Failed to optimize resume"}), 500
+                
+            # Re-evaluate
+            score, new_feedback = evaluate_resume_job_match(local_client, optimized_latex, job_description)
+            
+            # Generate a new resume_id for download
+            resume_id = str(uuid.uuid4())
+            resume_store[resume_id] = {
+                "latex_code": optimized_latex,
+                "score": score,
+                "feedback": new_feedback,
+                "api_key": provided_api_key if provided_api_key else None
+            }
+
+            response_data = {
+                "resume_id": resume_id,
+                "latex_code": optimized_latex,
+                "score": score,
+                "feedback": new_feedback,
+                "optimized": True,
+                "optimization_message": 'Re-optimization was performed by user request.',
+                "message": "Resume re-optimized successfully"
+            }
+
+            return jsonify(response_data), 200
+
+        except Exception as e:
+            logging.exception("An error occurred during re-optimization")
+            error_message = str(e) if str(e) else "An unknown error occurred during re-optimization"
+            return jsonify({"error": f"Processing error: {error_message}"}), 500
+
+    except Exception as e:
+        logging.exception("An error occurred in the reoptimize_resume route")
+        return jsonify({"error": "Server error occurred"}), 500
+
+@app.route("/reanalyze_skills", methods=["POST"])
+@login_required
+def reanalyze_skills():
+    try:
+        latex_code = request.form.get("latex_code")
+        job_description = request.form.get("job_description")
+        provided_api_key = request.form.get("api_key")
+
+        if not latex_code or not job_description:
+            return jsonify({"error": "Missing required fields."}), 400
+
+        if HAS_GENAI:
+            local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
+            if not local_client:
+                return jsonify({"error": "No valid API client available"}), 500
+        else:
+            local_client = None
+
+        try:
+            # Re-analyze skills
+            skills_analysis = analyze_skills(local_client, latex_code, job_description)
+            if not skills_analysis:
+                return jsonify({"error": "Failed to analyze skills"}), 500
+
+            return jsonify({
+                "skills_analysis": skills_analysis,
+                "message": "Skills re-analyzed successfully"
+            }), 200
+
+        except Exception as e:
+            logging.exception("An error occurred during skills re-analysis")
+            error_message = str(e) if str(e) else "An unknown error occurred during skills analysis"
+            return jsonify({"error": f"Processing error: {error_message}"}), 500
+
+    except Exception as e:
+        logging.exception("An error occurred in the reanalyze_skills route")
+        return jsonify({"error": "Server error occurred"}), 500
+
+@app.route("/regenerate_skills_latex", methods=["POST"])
+@login_required
+def regenerate_skills_latex():
+    try:
+        skills_data = request.get_json()
+        provided_api_key = request.form.get("api_key")
+
+        if not skills_data:
+            return jsonify({"error": "Missing skills data."}), 400
+
+        if HAS_GENAI:
+            local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
+            if not local_client:
+                return jsonify({"error": "No valid API client available"}), 500
+        else:
+            local_client = None
+
+        try:
+            # LaTeX template for skills section
+            latex_template = """%-----------SKILLS and CERTIFICATIONS-----------
+\\section{Professional Skills \\& Certifications}
+ \\begin{itemize}[leftmargin=0.15in, label={}]
+    \\small{\\item{
+<SKILLS_BY_CATEGORY>
+     \\textbf{Certifications}{: <CERTS>}
+    }}
+ \\end{itemize}"""
+
+            # Prepare skills data for formatting
+            current_skills_text = ""
+            for category, skills in skills_data.get("current_skills_by_category", {}).items():
+                if skills:
+                    current_skills_text += f"{category}:\n- " + "\n- ".join(skills) + "\n\n"
+
+            recommended_skills_text = ""
+            for category, skills in skills_data.get("recommended_skills_by_category", {}).items():
+                if skills:
+                    recommended_skills_text += f"{category}:\n- " + "\n- ".join(skills) + " (Recommended)\n\n"
+
+            format_prompt = f"""
+Based on the following skills and certifications analysis for a {skills_data.get('profession_type', '')} professional, 
+generate a LaTeX skills section using the exact template below.
+
+Current Skills:
+{current_skills_text}
+
+Current Certifications:
+{', '.join(skills_data.get('current_certifications', []))}
+
+Recommended Skills:
+{recommended_skills_text}
+
+Recommended Certifications:
+{', '.join(skills_data.get('recommended_certifications', []))}
+
+Use this exact LaTeX template format:
+{latex_template}
+
+Requirements:
+1. Replace <SKILLS_BY_CATEGORY> with appropriate category sections
+2. For each category, use the format: \\textbf{{Category Name}}{{: skill1, skill2, etc.}} \\\\
+3. Include both current and recommended skills/certifications
+4. Mark recommended skills/certifications with "(Recommended)" suffix
+5. Use appropriate line breaks (\\\\) between sections
+6. Escape any special LaTeX characters
+7. ALWAYS include the Certifications section
+8. If no certifications are found, add "No current certifications"
+9. Group similar skills together within each category
+10. Maintain professional formatting and organization
+"""
+
+            latex_response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=format_prompt
+            )
+            
+            if not latex_response.text:
+                return jsonify({"error": "Failed to generate LaTeX skills section"}), 500
+
+            return jsonify({
+                "latex_skills_section": latex_response.text.strip(),
+                "message": "Skills LaTeX section regenerated successfully"
+            }), 200
+
+        except Exception as e:
+            logging.exception("An error occurred during LaTeX skills regeneration")
+            error_message = str(e) if str(e) else "An unknown error occurred during LaTeX generation"
+            return jsonify({"error": f"Processing error: {error_message}"}), 500
+
+    except Exception as e:
+        logging.exception("An error occurred in the regenerate_skills_latex route")
+        return jsonify({"error": "Server error occurred"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

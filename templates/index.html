@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>AI Resume Generator by Mohammad Ibrahim Saleem (Ibrahimsaleem.com)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <!-- Prism.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-latex.min.js"></script>
+  </head>
+  <body>
+    <div class="app-container">
+      <h2>AI Resume Generator</h2>
+      <div class="app-description">
+        Transform your resume into a professional LaTeX document tailored to your target job description.
+      </div>
+      
+      <div class="developer-info">
+        Developed by <a href="https://ibrahimsaleem.com" target="_blank">Mohammad Ibrahim Saleem</a>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">Enter Your Information</div>
+        <div class="card-body">
+          <form id="resume-form">
+            <label for="resume-content">Paste your current resume text:</label>
+            <textarea id="resume-content" class="input-area" placeholder="Paste your current resume content here..."></textarea>
+            
+            <label for="job-description">Paste the job description you're applying for:</label>
+            <textarea id="job-description" class="input-area" placeholder="Paste the job description here to tailor your resume..."></textarea>
+            
+            <div id="api-key-container" class="api-key-container">
+              <div style="flex-grow: 1;">
+                <label for="api-key">Google Gemini API Key (optional):</label>
+                <input type="text" id="api-key" class="input-area" placeholder="Enter your Gemini API key for best results">
+              </div>
+              <div class="api-key-help" title="Get a Gemini API key from https://ai.google.dev/">?</div>
+            </div>
+            
+            <button type="submit" class="submit-btn">Generate Tailored Resume</button>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Process messages container -->
+      <div id="process-container" style="display: none;"></div>
+      
+      <!-- Results container -->
+      <div id="result-container" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            Resume Score: <span id="score-display" class="badge badge-primary">0/10</span>
+            <span id="optimized-badge" class="badge badge-success" style="display: none;">Optimized</span>
+          </div>
+          <div class="card-body">
+            <!-- Tabs -->
+            <div class="tabs">
+              <div id="latex-tab" class="tab active">LaTeX Code</div>
+              <div id="feedback-tab" class="tab">AI Feedback</div>
+              <div id="skills-tab" class="tab">Skills Analysis</div>
+            </div>
+            
+            <!-- Tab contents -->
+            <div id="latex-content" class="tab-content" style="display: block;">
+              <div id="optimization-status" style="margin-top:10px; color: #155724; font-weight: bold;"></div>
+              <pre><code id="latex-code" class="language-latex"></code></pre>
+              <a id="download-link" class="action-btn view-latex-btn" download="resume.tex">Download LaTeX</a>
+              <button id="copy-latex-btn" class="action-btn view-latex-btn" type="button">Copy LaTeX</button>
+              <button id="reoptimize-btn" class="action-btn new-resume-btn" type="button">Re-optimize Resume</button>
+            </div>
+            
+            <div id="feedback-content" class="tab-content" style="display: none;"></div>
+            
+            <div id="skills-content" class="tab-content" style="display: none;">
+              <div class="skills-section">
+                <h3>
+                  Current Skills
+                  <button id="reanalyze-skills-btn" class="action-btn view-latex-btn" type="button">Re-analyze Skills</button>
+                </h3>
+                <ul id="current-skills-list"></ul>
+              </div>
+              <div class="skills-section">
+                <h3>Missing Required Skills</h3>
+                <ul id="missing-skills-list"></ul>
+              </div>
+              <div class="skills-section">
+                <h3>Recommended Additional Skills</h3>
+                <ul id="recommended-skills-list"></ul>
+              </div>
+              <div class="skills-section">
+                <h3>
+                  Generated LaTeX Skills Section
+                  <button id="regenerate-skills-latex-btn" class="action-btn view-latex-btn" type="button">Regenerate LaTeX</button>
+                </h3>
+                <pre><code id="latex-skills-section" class="language-latex"></code></pre>
+                <button id="copy-skills-latex-btn" class="action-btn view-latex-btn" type="button">Copy Skills LaTeX</button>
+              </div>
+            </div>
+            
+            <button id="new-resume-btn" class="action-btn new-resume-btn">Generate Another Resume</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+  </body>
+</html> 
