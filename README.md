@@ -42,7 +42,7 @@ AI ResumeMaker is an advanced web application that transforms your plain text re
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/AI-ResumeMaker.git
+git clone https://github.com/ibrahimsaleem/AI-ResumeMaker.git
 cd AI-ResumeMaker
 ```
 
