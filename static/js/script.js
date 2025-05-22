@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const skillsContent = document.getElementById('skills-content');
     const scoreDisplay = document.getElementById('score-display');
     const optimizedBadge = document.getElementById('optimized-badge');
+    const companyNameInput = document.getElementById('company-name');
+    const mainHeading = document.querySelector('.app-container h2');
 
     // Function to add a message to the process container
     function addMessage(message, className) {
@@ -163,6 +165,23 @@ document.addEventListener('DOMContentLoaded', function() {
         feedbackContent.style.display = 'none';
     });
 
+    // Function to update tab and heading with company name
+    function updateCompanyNameUI() {
+        const company = companyNameInput.value.trim();
+        if (company) {
+            document.title = `${company}'s Resume | AI Resume Generator`;
+            if (mainHeading) mainHeading.textContent = `AI Resume Generator – ${company}`;
+        } else {
+            document.title = 'AI Resume Generator by Mohammad Ibrahim Saleem (Ibrahimsaleem.com)';
+            if (mainHeading) mainHeading.textContent = 'AI Resume Generator';
+        }
+    }
+    if (companyNameInput) {
+        companyNameInput.addEventListener('input', updateCompanyNameUI);
+    }
+    // On page load, set title/heading if company name is present
+    updateCompanyNameUI();
+
     // Form submission
     resumeForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -170,6 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const resumeContent = document.getElementById('resume-content').value;
         const jobDescription = document.getElementById('job-description').value;
         const apiKey = apiKeyInput.value;
+        const companyName = companyNameInput.value;
         
         if (!resumeContent) {
             addMessage("Please provide your resume content.", "error-message");
@@ -191,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('resume_content', resumeContent);
         formData.append('job_description', jobDescription);
+        formData.append('company_name', companyName);
         if (apiKey) formData.append('api_key', apiKey);
         
         // Send the form data to the server
@@ -229,6 +250,12 @@ document.addEventListener('DOMContentLoaded', function() {
             latexCodeContainer.textContent = data.latex_code || 'No LaTeX code generated';
             feedbackContent.innerHTML = (data.feedback || 'No feedback available').replace(/\n/g, '<br>');
             scoreDisplay.textContent = (data.score || 0) + "/10";
+            
+            // Update company name in tab and heading if present
+            if (data.company_name) {
+                companyNameInput.value = data.company_name;
+                updateCompanyNameUI();
+            }
             
             // Update skills analysis with better error handling
             if (data.skills_analysis) {
@@ -471,4 +498,41 @@ document.addEventListener('DOMContentLoaded', function() {
             addMessage(`Error: ${error.message || 'Failed to regenerate skills LaTeX. Please try again.'}`, "error-message");
         });
     });
+
+    // Save Resume button functionality
+    const saveResumeBtn = document.getElementById('save-main-resume-btn');
+    if (saveResumeBtn) {
+        saveResumeBtn.addEventListener('click', function() {
+            const resumeContent = document.getElementById('resume-content').value;
+            if (!resumeContent) {
+                addMessage('Please enter your resume content before saving.', 'error-message');
+                return;
+            }
+            fetch('/save_main_resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resume_content: resumeContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage('Resume saved successfully!', 'system-message');
+                } else {
+                    addMessage('Failed to save resume.', 'error-message');
+                }
+            })
+            .catch(() => {
+                addMessage('Error saving resume.', 'error-message');
+            });
+        });
+    }
+
+    // On page load, fetch saved resume content (if any)
+    fetch('/get_main_resume')
+        .then(response => response.json())
+        .then(data => {
+            if (data.resume_content) {
+                document.getElementById('resume-content').value = data.resume_content;
+            }
+        });
 }); 

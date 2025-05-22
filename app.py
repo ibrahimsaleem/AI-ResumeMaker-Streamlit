@@ -92,6 +92,7 @@ def generate_resume():
     try:
         resume_content = request.form.get("resume_content")
         job_description = request.form.get("job_description")
+        company_name = request.form.get("company_name", "").strip()
         provided_api_key = request.form.get("api_key")
         
         if not resume_content:
@@ -159,7 +160,8 @@ def generate_resume():
                 "optimized": optimized,
                 "optimization_message": optimization_message,
                 "skills_analysis": skills_analysis,
-                "message": "Resume generated successfully"
+                "message": "Resume generated successfully",
+                "company_name": company_name
             }
 
             return jsonify(response_data), 200
@@ -589,13 +591,14 @@ Requirements:
 1. Replace <SKILLS_BY_CATEGORY> with appropriate category sections
 2. For each category, use the format: \\textbf{{Category Name}}{{: skill1, skill2, etc.}} \\\\
 3. Include both current and recommended skills/certifications
-4. Mark recommended skills/certifications with "(Recommended)" suffix
+4. Do not mark recommended skills/certifications with any special suffix
 5. Use appropriate line breaks (\\\\) between sections
 6. Escape any special LaTeX characters
 7. ALWAYS include the Certifications section
 8. If no certifications are found, add "No current certifications"
 9. Group similar skills together within each category
 10. Maintain professional formatting and organization
+11. Keep the overall length of the generated skills section (number of lines/items) similar to the original skills section. Do not make the section significantly longer than the original.
 """
 
         latex_response = client.models.generate_content(
@@ -793,6 +796,7 @@ Requirements:
 8. If no certifications are found, add "No current certifications"
 9. Group similar skills together within each category
 10. Maintain professional formatting and organization
+11. Keep the overall length of the generated skills section (number of lines/items) similar to the original skills section. Do not make the section significantly longer than the original.
 """
 
             latex_response = client.models.generate_content(
@@ -816,6 +820,22 @@ Requirements:
     except Exception as e:
         logging.exception("An error occurred in the regenerate_skills_latex route")
         return jsonify({"error": "Server error occurred"}), 500
+
+@app.route('/save_main_resume', methods=['POST'])
+@login_required
+def save_main_resume():
+    data = request.get_json()
+    resume_content = data.get('resume_content', '').strip()
+    if not resume_content:
+        return jsonify({'success': False, 'error': 'No resume content provided.'}), 400
+    session['main_resume_content'] = resume_content
+    return jsonify({'success': True})
+
+@app.route('/get_main_resume', methods=['GET'])
+@login_required
+def get_main_resume():
+    resume_content = session.get('main_resume_content', '')
+    return jsonify({'resume_content': resume_content})
 
 if __name__ == "__main__":
     app.run(debug=True)
