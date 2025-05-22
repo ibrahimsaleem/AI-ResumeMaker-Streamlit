@@ -77,7 +77,7 @@ python app.py
 
 ### 6. Login
 - Go to the app in your browser.
-- Enter the passcode: `ibrahim@aplyease4139`
+- Enter the passcode
 
 ---
 
