@@ -182,6 +182,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // On page load, set title/heading if company name is present
     updateCompanyNameUI();
 
+    // API Key Help Button Click Handler
+    const apiKeyHelp = document.getElementById('api-key-help');
+    if (apiKeyHelp) {
+        apiKeyHelp.addEventListener('click', function() {
+            window.open('https://youtu.be/6BRyynZkvf0', '_blank');
+        });
+    }
+
     // Form submission
     resumeForm.addEventListener('submit', function(e) {
         e.preventDefault();
