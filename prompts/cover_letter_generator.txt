@@ -1,0 +1,53 @@
+You are a professional cover letter writer with expertise in creating compelling, personalized cover letters that complement resumes and align with job requirements.
+
+TASK: Generate a professional cover letter for the following application:
+
+CANDIDATE INFORMATION:
+- Name: {name}
+- Email: {email}
+- Company: {company_name}
+
+RESUME CONTENT (LaTeX format):
+{latex_code}
+
+JOB DESCRIPTION:
+{job_description}
+
+COVER LETTER REQUIREMENTS:
+
+1. **Professional Format:**
+   - Use standard business letter format
+   - Include proper greeting, body paragraphs, and closing
+   - Keep length to 3-4 paragraphs (200-300 words)
+   - Use professional, confident tone
+
+2. **Personalization:**
+   - Address the letter to the hiring manager or "Hiring Team at {company_name}"
+   - Reference specific aspects of the job description
+   - Mention the company name naturally in the content
+   - Show genuine interest in the role and company
+
+3. **Content Structure:**
+   - Opening: Express interest in the specific position and company
+   - Body Paragraph 1: Highlight 2-3 most relevant qualifications from the resume
+   - Body Paragraph 2: Connect experience to job requirements with specific examples
+   - Closing: Express enthusiasm for next steps and thank the reader
+
+4. **Key Elements to Include:**
+   - Reference specific skills/experiences from the resume that match job requirements
+   - Show understanding of the role and company
+   - Demonstrate value proposition
+   - Use action verbs and quantifiable achievements when possible
+   - Maintain professional yet engaging tone
+
+5. **Avoid:**
+   - Generic statements that could apply to any job
+   - Repetition of resume content verbatim
+   - Overly formal or stiff language
+   - Lengthy paragraphs or excessive detail
+   - Negative statements or apologies
+
+OUTPUT FORMAT:
+Generate a complete cover letter in plain text format, ready to be copied and used. Do not include any markdown formatting, explanations, or code blocks.
+
+The cover letter should be professional, personalized, and compelling while staying within the specified length and format requirements.

@@ -79,6 +79,7 @@ DEFAULT_LATEX_TEMPLATE = load_template("templates/latex_template.tex")
 RESUME_FORMATTER_PROMPT = load_prompt("prompts/resume_formatter.txt")
 RESUME_EVALUATOR_PROMPT = load_prompt("prompts/resume_evaluator.txt")
 RESUME_OPTIMIZER_PROMPT = load_prompt("prompts/resume_optimizer.txt")
+COVER_LETTER_PROMPT = load_prompt("prompts/cover_letter_generator.txt")
 
 @app.route("/", methods=["GET"]) 
 @login_required
@@ -391,6 +392,75 @@ Previous Evaluation Feedback (If Available):
     except Exception as e:
         logging.exception("Exception occurred during resume optimization")
         return latex_code
+
+def generate_cover_letter(client, latex_code, company_name, job_description):
+    """
+    Generates a cover letter based on the resume, company name, and job description.
+    """
+    if not client or not HAS_GENAI:
+        return "AI processing not available. Please set your API key."
+    
+    try:
+        logging.info("Generating cover letter with Gemini AI...")
+        
+        # Extract key information from the LaTeX resume
+        lines = latex_code.split('\n')
+        name = "Your Name"
+        email = "your.email@example.com"
+        
+        # Extract name and email from LaTeX code
+        for line in lines:
+            if '\\textbf{\\Huge' in line and 'scshape' in line:
+                # Extract name from LaTeX formatting
+                name_match = line.split('\\textbf{\\Huge \\scshape ')[1].split('}')[0] if '\\textbf{\\Huge \\scshape ' in line else None
+                if name_match:
+                    name = name_match
+            elif 'href{mailto:' in line:
+                # Extract email from LaTeX formatting
+                email_match = line.split('href{mailto:')[1].split('}')[0] if 'href{mailto:' in line else None
+                if email_match:
+                    email = email_match
+        
+        cover_letter_prompt = f"""
+{COVER_LETTER_PROMPT}
+
+CANDIDATE INFORMATION:
+- Name: {name}
+- Email: {email}
+- Company: {company_name}
+
+RESUME CONTENT (LaTeX format):
+{latex_code}
+
+JOB DESCRIPTION:
+{job_description}
+"""
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=cover_letter_prompt
+        )
+        
+        if response and response.text:
+            cover_letter = response.text.strip()
+            
+            # Clean up the response
+            if cover_letter.startswith("```"):
+                cover_letter = cover_letter[3:]
+            if cover_letter.endswith("```"):
+                cover_letter = cover_letter[:-3]
+            
+            cover_letter = cover_letter.strip()
+            
+            logging.info("Cover letter generated successfully")
+            return cover_letter
+        else:
+            logging.error("No response received from Gemini AI for cover letter generation")
+            return "Error: Unable to generate cover letter. Please try again."
+            
+    except Exception as e:
+        logging.exception("Exception occurred while generating cover letter with Gemini AI")
+        return f"Error generating cover letter: {str(e)}"
 
 def analyze_skills(client, latex_code, job_description):
     """
@@ -836,6 +906,58 @@ def save_main_resume():
 def get_main_resume():
     resume_content = session.get('main_resume_content', '')
     return jsonify({'resume_content': resume_content})
+
+@app.route("/generate_cover_letter", methods=["POST"])
+@login_required
+def generate_cover_letter_route():
+    """Handles cover letter generation using Gemini AI."""
+    try:
+        latex_code = request.form.get("latex_code")
+        company_name = request.form.get("company_name", "").strip()
+        job_description = request.form.get("job_description")
+        provided_api_key = request.form.get("api_key")
+        
+        if not latex_code:
+            return jsonify({"error": "No LaTeX code provided"}), 400
+        
+        if not company_name:
+            return jsonify({"error": "Company name is required for cover letter generation"}), 400
+        
+        if not job_description:
+            return jsonify({"error": "Job description is required for cover letter generation"}), 400
+        
+        # Use the provided API key if available; otherwise, use default
+        if HAS_GENAI:
+            local_client = genai.Client(api_key=provided_api_key) if provided_api_key else default_client
+            if not local_client:
+                return jsonify({"error": "No valid API client available"}), 500
+        else:
+            local_client = None
+
+        try:
+            logging.info("Starting cover letter generation")
+            
+            # Generate cover letter with Gemini
+            cover_letter = generate_cover_letter(local_client, latex_code, company_name, job_description)
+            if not cover_letter or cover_letter.startswith("Error"):
+                return jsonify({"error": "Failed to generate cover letter"}), 500
+            
+            response_data = {
+                "cover_letter": cover_letter,
+                "message": "Cover letter generated successfully",
+                "company_name": company_name
+            }
+
+            return jsonify(response_data), 200
+
+        except Exception as e:
+            logging.exception("An error occurred during cover letter generation")
+            error_message = str(e) if str(e) else "An unknown error occurred during processing"
+            return jsonify({"error": f"Processing error: {error_message}"}), 500
+
+    except Exception as e:
+        logging.exception("An error occurred in the generate_cover_letter route")
+        return jsonify({"error": "Server error occurred"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
