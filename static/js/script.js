@@ -285,6 +285,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show the result container
             resultContainer.style.display = 'block';
             
+            // Show cover letter section if company name and job description are available
+            showCoverLetterSection();
+            
             // Set up the download link
             if (data.resume_id) {
                 document.getElementById('download-link').href = '/download_latex/' + data.resume_id;
@@ -534,6 +537,135 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
+    // Cover Letter functionality
+    const coverLetterSection = document.getElementById('cover-letter-section');
+    const coverLetterContent = document.getElementById('cover-letter-content');
+    const generateCoverLetterBtn = document.getElementById('generate-cover-letter-btn');
+    const copyCoverLetterBtn = document.getElementById('copy-cover-letter-btn');
+    const regenerateCoverLetterBtn = document.getElementById('regenerate-cover-letter-btn');
+
+    // Show cover letter section when resume is generated
+    function showCoverLetterSection() {
+        const companyName = document.getElementById('company-name').value.trim();
+        const jobDescription = document.getElementById('job-description').value.trim();
+        
+        if (companyName && jobDescription) {
+            coverLetterSection.style.display = 'block';
+        }
+    }
+
+    // Generate cover letter
+    generateCoverLetterBtn.addEventListener('click', function() {
+        const latexCode = latexCodeContainer.textContent;
+        const companyName = document.getElementById('company-name').value.trim();
+        const jobDescription = document.getElementById('job-description').value.trim();
+        const apiKey = apiKeyInput.value;
+        
+        if (!latexCode || latexCode === 'No LaTeX code generated') {
+            addMessage("Please generate a resume first.", "error-message");
+            return;
+        }
+        
+        if (!companyName) {
+            addMessage("Please enter a company name.", "error-message");
+            return;
+        }
+        
+        if (!jobDescription) {
+            addMessage("Please enter a job description.", "error-message");
+            return;
+        }
+        
+        addMessage("Generating cover letter...", "system-message");
+        
+        const formData = new FormData();
+        formData.append('latex_code', latexCode);
+        formData.append('company_name', companyName);
+        formData.append('job_description', jobDescription);
+        if (apiKey) formData.append('api_key', apiKey);
+        
+        fetch('/generate_cover_letter', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json().catch(error => {
+                throw new Error('Invalid JSON response from server');
+            });
+        })
+        .then(data => {
+            if (data.error) {
+                addMessage("Error: " + data.error, "error-message");
+                return;
+            }
+            
+            addMessage("Cover letter generated successfully!", "system-message");
+            coverLetterContent.textContent = data.cover_letter;
+            generateCoverLetterBtn.style.display = 'none';
+            copyCoverLetterBtn.style.display = 'inline-block';
+            regenerateCoverLetterBtn.style.display = 'inline-block';
+        })
+        .catch(error => {
+            console.error('Error generating cover letter:', error);
+            addMessage(`Error: ${error.message || 'Failed to generate cover letter. Please try again.'}`, "error-message");
+        });
+    });
+
+    // Copy cover letter
+    copyCoverLetterBtn.addEventListener('click', function() {
+        const coverLetter = coverLetterContent.textContent;
+        navigator.clipboard.writeText(coverLetter).then(function() {
+            addMessage('Cover letter copied to clipboard!', 'system-message');
+        }, function(err) {
+            addMessage('Failed to copy cover letter.', 'error-message');
+        });
+    });
+
+    // Regenerate cover letter
+    regenerateCoverLetterBtn.addEventListener('click', function() {
+        const latexCode = latexCodeContainer.textContent;
+        const companyName = document.getElementById('company-name').value.trim();
+        const jobDescription = document.getElementById('job-description').value.trim();
+        const apiKey = apiKeyInput.value;
+        
+        addMessage("Regenerating cover letter...", "system-message");
+        
+        const formData = new FormData();
+        formData.append('latex_code', latexCode);
+        formData.append('company_name', companyName);
+        formData.append('job_description', jobDescription);
+        if (apiKey) formData.append('api_key', apiKey);
+        
+        fetch('/generate_cover_letter', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json().catch(error => {
+                throw new Error('Invalid JSON response from server');
+            });
+        })
+        .then(data => {
+            if (data.error) {
+                addMessage("Error: " + data.error, "error-message");
+                return;
+            }
+            
+            addMessage("Cover letter regenerated successfully!", "system-message");
+            coverLetterContent.textContent = data.cover_letter;
+        })
+        .catch(error => {
+            console.error('Error regenerating cover letter:', error);
+            addMessage(`Error: ${error.message || 'Failed to regenerate cover letter. Please try again.'}`, "error-message");
+        });
+    });
 
     // On page load, fetch saved resume content (if any)
     fetch('/get_main_resume')

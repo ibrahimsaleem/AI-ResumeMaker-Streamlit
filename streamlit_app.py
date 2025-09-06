@@ -227,6 +227,7 @@ DEFAULT_LATEX_TEMPLATE = load_template("templates/latex_template.tex")
 RESUME_FORMATTER_PROMPT = load_prompt("prompts/resume_formatter.txt")
 RESUME_EVALUATOR_PROMPT = load_prompt("prompts/resume_evaluator.txt")
 RESUME_OPTIMIZER_PROMPT = load_prompt("prompts/resume_optimizer.txt")
+COVER_LETTER_PROMPT = load_prompt("prompts/cover_letter_generator.txt")
 
 # File processing functions
 def extract_text_from_pdf(file_content):
@@ -920,6 +921,77 @@ Previous Evaluation Feedback (If Available):
         logging.exception("Exception occurred during resume optimization")
         return latex_code
 
+def generate_cover_letter(client, latex_code, company_name, job_description):
+    """Generate a cover letter based on the resume, company name, and job description."""
+    # Check if we have a valid API key
+    api_key = st.session_state.get('api_key', '')
+    env_api_key = os.getenv('GENAI_API_KEY', '')
+    
+    if not client or not HAS_GENAI or (not api_key and not env_api_key):
+        return "AI processing not available. Please set your API key in Settings."
+    
+    try:
+        logging.info("Generating cover letter with Gemini AI...")
+        
+        # Extract key information from the LaTeX resume
+        lines = latex_code.split('\n')
+        name = "Your Name"
+        email = "your.email@example.com"
+        
+        # Extract name and email from LaTeX code
+        for line in lines:
+            if '\\textbf{\\Huge' in line and 'scshape' in line:
+                # Extract name from LaTeX formatting
+                name_match = line.split('\\textbf{\\Huge \\scshape ')[1].split('}')[0] if '\\textbf{\\Huge \\scshape ' in line else None
+                if name_match:
+                    name = name_match
+            elif 'href{mailto:' in line:
+                # Extract email from LaTeX formatting
+                email_match = line.split('href{mailto:')[1].split('}')[0] if 'href{mailto:' in line else None
+                if email_match:
+                    email = email_match
+        
+        cover_letter_prompt = f"""
+{COVER_LETTER_PROMPT}
+
+CANDIDATE INFORMATION:
+- Name: {name}
+- Email: {email}
+- Company: {company_name}
+
+RESUME CONTENT (LaTeX format):
+{latex_code}
+
+JOB DESCRIPTION:
+{job_description}
+"""
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=cover_letter_prompt
+        )
+        
+        if response and response.text:
+            cover_letter = response.text.strip()
+            
+            # Clean up the response
+            if cover_letter.startswith("```"):
+                cover_letter = cover_letter[3:]
+            if cover_letter.endswith("```"):
+                cover_letter = cover_letter[:-3]
+            
+            cover_letter = cover_letter.strip()
+            
+            logging.info("Cover letter generated successfully")
+            return cover_letter
+        else:
+            logging.error("No response received from Gemini AI for cover letter generation")
+            return "Error: Unable to generate cover letter. Please try again."
+            
+    except Exception as e:
+        logging.exception("Exception occurred while generating cover letter with Gemini AI")
+        return f"Error generating cover letter: {str(e)}"
+
 def analyze_skills(client, latex_code, job_description):
     """Analyze skills and compare with job requirements."""
     # Check if we have a valid API key
@@ -1437,6 +1509,77 @@ def main():
                     )
                 else:
                     st.info("Generate a resume to see LaTeX code here")
+                
+                # Cover Letter Section
+                if latex_code and resume_data.get('company_name') and resume_data.get('job_description'):
+                    st.markdown("### 📝 Cover Letter")
+                    
+                    # Check if cover letter is already generated
+                    if 'cover_letter' not in resume_data:
+                        resume_data['cover_letter'] = None
+                    
+                    if resume_data['cover_letter']:
+                        # Display existing cover letter
+                        st.text_area(
+                            "Generated Cover Letter:",
+                            value=resume_data['cover_letter'],
+                            height=300,
+                            key="cover_letter_display",
+                            disabled=True
+                        )
+                        
+                        col_cover_copy, col_cover_regen = st.columns(2)
+                        with col_cover_copy:
+                            if st.button("📋 Copy Cover Letter", key="copy_cover_letter", use_container_width=True):
+                                st.success("Cover letter copied to clipboard!")
+                        
+                        with col_cover_regen:
+                            if st.button("🔄 Regenerate Cover Letter", key="regenerate_cover_letter", use_container_width=True):
+                                with st.spinner("🤖 Generating new cover letter..."):
+                                    if HAS_GENAI:
+                                        local_client = genai.Client(api_key=api_key) if api_key else default_client
+                                    else:
+                                        local_client = None
+                                    
+                                    new_cover_letter = generate_cover_letter(
+                                        local_client,
+                                        latex_code,
+                                        resume_data.get('company_name', ''),
+                                        resume_data.get('job_description', '')
+                                    )
+                                    
+                                    if new_cover_letter and not new_cover_letter.startswith("Error"):
+                                        resume_data['cover_letter'] = new_cover_letter
+                                        st.session_state.resume_store[st.session_state.current_resume_id] = resume_data
+                                        st.success("Cover letter regenerated successfully!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Failed to regenerate cover letter: {new_cover_letter}")
+                    else:
+                        # Generate cover letter button
+                        if st.button("📝 Generate Cover Letter", key="generate_cover_letter", use_container_width=True):
+                            with st.spinner("🤖 Generating cover letter..."):
+                                if HAS_GENAI:
+                                    local_client = genai.Client(api_key=api_key) if api_key else default_client
+                                else:
+                                    local_client = None
+                                
+                                cover_letter = generate_cover_letter(
+                                    local_client,
+                                    latex_code,
+                                    resume_data.get('company_name', ''),
+                                    resume_data.get('job_description', '')
+                                )
+                                
+                                if cover_letter and not cover_letter.startswith("Error"):
+                                    resume_data['cover_letter'] = cover_letter
+                                    st.session_state.resume_store[st.session_state.current_resume_id] = resume_data
+                                    st.success("Cover letter generated successfully!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to generate cover letter: {cover_letter}")
+                elif latex_code:
+                    st.info("💡 Company name and job description are required to generate a cover letter")
                 
                 # AI Feedback
                 st.markdown("### 💬 AI Feedback")
